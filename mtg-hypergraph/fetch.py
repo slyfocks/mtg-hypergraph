@@ -89,7 +89,8 @@ def ml_tournament_player_data(tournament_id):
                         a.text.split('|')[-1].split(':')[-1].strip(' '))
                        for a in page.xpath('/html/body/table//tr[2]/td[2]/div[2]//table[3]//tr/td/table//tr[2]/td')]
     #list of lists of each players decklist
-    decks = [[b.lstrip('\n\t\t\t') for b in a.xpath('//tr/td[@class="MD"]/text()')] for a in page.xpath('//table')]
+    decks = [a.xpath('text()') for a in page.xpath('//td[@class="MD"]')]
+    decks = [[card.strip('\n\t\t\t') for card in decks[i] + decks[i+1]] for i in range(0, len(decks), 2)]
     players, records = zip(*players_records)
     return players, records, decks
 
