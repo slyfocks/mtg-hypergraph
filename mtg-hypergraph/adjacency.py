@@ -1,6 +1,8 @@
 import numpy as np
 import json
 import os
+import scipy as sp
+import scipy.stats
 from fetch import ml_tournament
 
 DATA_REPO = '/'.join(os.path.dirname(os.path.realpath(__file__)).split('/')[:-1]) + '/data/'
@@ -27,8 +29,15 @@ def card_key(mtg_format=['standard'], output=False):
         return card_dict
 
 
-def matrix(mtg_format=['standard']):
+def key_card(mtg_format=['standard']):
+    return {str(index): card for card, index in card_key(mtg_format=mtg_format).items()}
+
+
+#a higher (lower) norm makes the ranking more (less) favorable to popular cards
+def matrix(mtg_format=['standard'], ignore_count=False, output=False, proportion=False, norm=30, data_fmt='%u'):
     tournament_path = DATA_REPO + 'tournament_data_' + '_'.join(mtg_format) + '.json'
+    matrix_path = DATA_REPO + 'adjacency' + '_'.join([ignore_count*'ignore_count',
+                                                      proportion*'proportion'] + mtg_format) + '.txt'
     with open(tournament_path) as file:
         t_data = json.load(file)
     card_dict = card_key(mtg_format=mtg_format)
@@ -45,16 +54,54 @@ def matrix(mtg_format=['standard']):
             card_counts = [[int(card.split(' ')[0]) for card in deck] for deck in decks]
             if len(card_keys) + len(card_counts) != 4:
                 continue
-            record = (int(record.split('-')[0]), int(record.split('-')[1]))
+            try:
+                record = (int(record.split('-')[0]), int(record.split('-')[1]))
+            except AttributeError:
+                continue
             for index in range(2):
                 if not record[index]:
                     continue
                 for i, card_id in enumerate(card_keys[index]):
                     for opp_card_id in card_keys[index-1]:
-                        adjacency[card_id][opp_card_id] += card_counts[index][i]
-    return adjacency
+                        if ignore_count:
+                            adjacency[card_id][opp_card_id] += record[index]
+                        else:
+                            adjacency[card_id][opp_card_id] += record[index]*card_counts[index][i]
+    if proportion:
+        data_fmt = '%.3f'
+        for i in range(len(card_dict)):
+            for j in range(len(card_dict)):
+                if j <= i:
+                    try:
+                        adjacency[i][j] = (norm/2 + float(adjacency[i][j]))/(norm + adjacency[i][j] + adjacency[j][i])
+                        adjacency[j][i] = 1 - adjacency[i][j]
+                    except (ValueError, ZeroDivisionError):
+                        adjacency[i][j], adjacency[j][i] = 0, 0
+    if output:
+        np.savetxt(matrix_path, adjacency, fmt=data_fmt)
+    else:
+        return adjacency
 
+
+def mean_confidence_interval(data, confidence=0.95):
+    a = 1.0*np.array(data)
+    n = len(a)
+    m, se = np.mean(a), scipy.stats.sem(a)
+    h = se * sp.stats.t._ppf((1+confidence)/2., n-1)
+    return m, m-h, m+h
+
+
+def best_cards(mtg_format=['standard'], ignore_count=False, proportion=True, top_x=20):
+    key_card_dict = key_card(mtg_format=mtg_format)
+    card_matrix = matrix(mtg_format=mtg_format, ignore_count=ignore_count, proportion=proportion)
+    #average values over rows and sort. We only want non-zero values.
+    conf_ints = np.apply_along_axis(mean_confidence_interval, axis=1, arr=card_matrix)
+    card_conf_ints = [(key_card_dict[str(card_index)], conf_int) for card_index, conf_int in enumerate(conf_ints)]
+    #sort in descending order by mean
+    sorted_conf_ints = sorted(card_conf_ints, key=lambda x: x[1][0], reverse=True)
+    print(sorted_conf_ints)
 
 
 if __name__ == '__main__':
-    print(matrix())
+    #print(best_cards(mtg_format=['limited'], ignore_count=True))
+    print(best_cards(mtg_format=['standard'], ignore_count=True))
