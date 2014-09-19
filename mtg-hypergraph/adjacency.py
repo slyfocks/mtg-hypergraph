@@ -98,7 +98,7 @@ def best_cards(mtg_format=['standard'], ignore_count=False, proportion=True, top
     conf_ints = np.apply_along_axis(mean_confidence_interval, axis=1, arr=card_matrix)
     card_conf_ints = [(key_card_dict[str(card_index)], conf_int) for card_index, conf_int in enumerate(conf_ints)]
     #sort in descending order by mean
-    sorted_conf_ints = sorted(card_conf_ints, key=lambda x: x[1][0], reverse=True)
+    sorted_conf_ints = sorted(card_conf_ints, key=lambda x: x[1][0], reverse=True)[:top_x]
     print(sorted_conf_ints)
 
 
