@@ -34,7 +34,7 @@ def key_card(mtg_format=['standard']):
 
 
 #a higher (lower) norm makes the ranking more (less) favorable to popular cards
-def matrix(mtg_format=['standard'], ignore_count=False, output=False, proportion=False, norm=30, data_fmt='%u'):
+def matrix(mtg_format=['standard'], ignore_count=False, output=False, proportion=False, norm=0, data_fmt='%u'):
     tournament_path = DATA_REPO + 'tournament_data_' + '_'.join(mtg_format) + '.json'
     matrix_path = DATA_REPO + 'adjacency' + '_'.join([ignore_count*'ignore_count',
                                                       proportion*'proportion'] + mtg_format) + '.txt'
@@ -102,6 +102,21 @@ def best_cards(mtg_format=['standard'], ignore_count=False, proportion=True, top
     print(sorted_conf_ints)
 
 
+def best_cards_against(card_name, mtg_format=['standard'], top_x=30):
+    card_to_key = card_key(mtg_format=mtg_format)
+    key_to_card = key_card(mtg_format=mtg_format)
+    card_matrix = matrix(mtg_format=['standard'], ignore_count=True)
+    card_id = card_to_key[card_name]
+    success_loss_array = [(index, [1]*card_matrix[index, card_id] + [0]*card_matrix[card_id, index])
+                          for index in range(len(card_matrix[card_id]))
+                          if card_matrix[card_id, index] + card_matrix[index, card_id]]
+    #creates 95% confidence intervals and filters out (1.0, 1.0, 1.0) results
+    conf_ints = [(key_to_card[str(matchup[0])], mean_confidence_interval(matchup[1]))
+                 for matchup in success_loss_array if not all(int_val == 1.0 for int_val in matchup[1])]
+    sorted_conf_ints = sorted(conf_ints, key=lambda x: x[1][1], reverse=True)[:top_x]
+    print(sorted_conf_ints)
+
+
+
 if __name__ == '__main__':
-    #print(best_cards(mtg_format=['limited'], ignore_count=True))
-    print(best_cards(mtg_format=['standard'], ignore_count=True))
+    print(best_cards_against("Swamp"))
