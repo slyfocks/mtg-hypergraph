@@ -1,6 +1,10 @@
 import numpy as np
 import json
 import os
+import networkx as nx
+import matplotlib
+matplotlib.use('Qt4Agg')
+import matplotlib.pyplot as plt
 import scipy as sp
 import scipy.stats
 from fetch import ml_tournament
@@ -34,7 +38,7 @@ def key_card(mtg_format=['standard']):
 
 
 #a higher (lower) norm makes the ranking more (less) favorable to popular cards
-def matrix(mtg_format=['standard'], ignore_count=False, output=False, proportion=False, norm=0, data_fmt='%u'):
+def matrix(mtg_format=['standard'], ignore_count=False, output=False, proportion=False, norm=0.1, data_fmt='%u'):
     tournament_path = DATA_REPO + 'tournament_data_' + '_'.join(mtg_format) + '.json'
     matrix_path = DATA_REPO + 'adjacency' + '_'.join([ignore_count*'ignore_count',
                                                       proportion*'proportion'] + mtg_format) + '.txt'
@@ -91,15 +95,21 @@ def mean_confidence_interval(data, confidence=0.95):
     return m, m-h, m+h
 
 
-def best_cards(mtg_format=['standard'], ignore_count=False, proportion=True, top_x=20):
+def best_cards(mtg_format=['standard'], ignore_count=False, display_names=True,
+               proportion=True, verbose=True, top_x=20):
     key_card_dict = key_card(mtg_format=mtg_format)
     card_matrix = matrix(mtg_format=mtg_format, ignore_count=ignore_count, proportion=proportion)
     #average values over rows and sort. We only want non-zero values.
     conf_ints = np.apply_along_axis(mean_confidence_interval, axis=1, arr=card_matrix)
-    card_conf_ints = [(key_card_dict[str(card_index)], conf_int) for card_index, conf_int in enumerate(conf_ints)]
+    if display_names:
+        card_conf_ints = [(key_card_dict[str(card_index)], conf_int) for card_index, conf_int in enumerate(conf_ints)]
+    else:
+        card_conf_ints = [(card_index, conf_int) for card_index, conf_int in enumerate(conf_ints)]
     #sort in descending order by mean
     sorted_conf_ints = sorted(card_conf_ints, key=lambda x: x[1][0], reverse=True)[:top_x]
-    print(sorted_conf_ints)
+    if verbose:
+        print(sorted_conf_ints)
+    return sorted_conf_ints
 
 
 def best_cards_against(card_name, mtg_format=['standard'], top_x=30):
@@ -117,6 +127,76 @@ def best_cards_against(card_name, mtg_format=['standard'], top_x=30):
     print(sorted_conf_ints)
 
 
+def digraph_best_cards(mtg_format=['standard'], top_x=2):
+    card_matrix = matrix(mtg_format=mtg_format, ignore_count=True)
+    success_loss_array = [[(i, j, [1]*card_matrix[i, j] + [0]*card_matrix[j, i]) for j in range(len(card_matrix))]
+                          for i in range(len(card_matrix))]
+    conf_ints = [sorted([(matchup[0], matchup[1], mean_confidence_interval(matchup[2])[1]) for matchup in row
+                 if not all(int_val == 1.0 for int_val in matchup[2])], key=lambda x: x[2], reverse=True)[:top_x]
+                 for row in success_loss_array]
+    top_vals = [top_val for top_list in conf_ints for top_val in top_list if top_val[2] > 0.0]
+    print(top_vals)
+    DG = nx.DiGraph()
+    DG.add_weighted_edges_from(top_vals)
+    nx.draw(DG)
+    plt.show()
+
+
+#TODO: Create matrix out of top_x cards to reduce graphics/processing load
 
 if __name__ == '__main__':
-    print(best_cards_against("Swamp"))
+    import pylab as P
+    import matplotlib.cm as cm
+
+    def _blob(x, y, area, color):
+        """
+        Draws a square-shaped blob with the given area (< 1) at
+        the given coordinates.
+        """
+        hs = np.sqrt(area) / 2
+        xcorners = np.array([x - hs, x + hs, x + hs, x - hs])
+        ycorners = np.array([y - hs, y - hs, y + hs, y + hs])
+        P.fill(xcorners, ycorners, color=color)
+    key_card_dict = key_card(mtg_format=['standard'])
+    cards = [entry[0] for entry in best_cards(ignore_count=True, display_names=False, top_x=50)]
+    names = [key_card_dict[str(card)] for card in cards]
+
+
+    def hinton(W, max_weight=None, names=names):
+        """
+        Draws a Hinton diagram for visualizing a weight matrix.
+        Temporarily disables matplotlib interactive mode if it is on,
+        otherwise this takes forever.
+        """
+        reenable = False
+        if P.isinteractive():
+            P.ioff()
+        P.clf()
+        height, width = W.shape
+        if not max_weight:
+            max_weight = 2**np.ceil(np.log(np.max(np.abs(W)))/np.log(2))
+
+        P.fill(np.array([0, width, width, 0]), np.array([0, 0, height, height]), 'gray')
+        P.axis('off')
+        P.axis('equal')
+        cmap = plt.get_cmap('RdYlGn')
+        for x in range(width):
+            if names:
+                plt.text(-0.5, x, names[x], fontsize=12, ha='right', va='bottom')
+                plt.text(x, height+0.5, names[height-x-1], fontsize=12, va='bottom', rotation='vertical', ha='left')
+            for y in range(height):
+                _x = x+1
+                _y = y+1
+                w = W[y, x]
+                if w > 0:
+                    _blob(_x - 0.5, height - _y + 0.5, min(1, w/max_weight), color=cmap(w/max_weight))
+                elif w < 0:
+                    _blob(_x - 0.5, height - _y + 0.5, min(1, -w/max_weight), 'black')
+        if reenable:
+            P.ion()
+        P.show()
+    print(names)
+    card_matrix = matrix(mtg_format=['standard'], ignore_count=True, proportion=True)
+    card_matrix = card_matrix[:, cards][cards]
+    print(card_matrix)
+    hinton(card_matrix)
