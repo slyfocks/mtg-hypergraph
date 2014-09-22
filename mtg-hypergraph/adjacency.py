@@ -96,7 +96,7 @@ def mean_confidence_interval(data, confidence=0.95):
 
 
 def best_cards(mtg_format=['standard'], ignore_count=False, display_names=True,
-               proportion=True, verbose=True, top_x=20):
+               proportion=True, verbose=True, worst=False, top_x=20):
     key_card_dict = key_card(mtg_format=mtg_format)
     card_matrix = matrix(mtg_format=mtg_format, ignore_count=ignore_count, proportion=proportion)
     #average values over rows and sort. We only want non-zero values.
@@ -106,7 +106,7 @@ def best_cards(mtg_format=['standard'], ignore_count=False, display_names=True,
     else:
         card_conf_ints = [(card_index, conf_int) for card_index, conf_int in enumerate(conf_ints)]
     #sort in descending order by mean
-    sorted_conf_ints = sorted(card_conf_ints, key=lambda x: x[1][0], reverse=True)[:top_x]
+    sorted_conf_ints = sorted(card_conf_ints, key=lambda x: x[1][0], reverse=not worst)[:top_x]
     if verbose:
         print(sorted_conf_ints)
     return sorted_conf_ints
@@ -141,8 +141,9 @@ def digraph_best_cards(mtg_format=['standard'], top_x=2):
     nx.draw(DG)
     plt.show()
 
-
-#TODO: Create matrix out of top_x cards to reduce graphics/processing load
+#scrape links like:
+#http://archive.wizards.com/Magic/digital/magiconlinetourn.aspx?x=mtg/digital/magiconline/tourn/6800345
+#for more data
 
 if __name__ == '__main__':
     import pylab as P
@@ -159,10 +160,12 @@ if __name__ == '__main__':
         P.fill(xcorners, ycorners, color=color)
     key_card_dict = key_card(mtg_format=['standard'])
     cards = [entry[0] for entry in best_cards(ignore_count=True, display_names=False, top_x=50)]
+    worst_cards = [entry[0] for entry in best_cards(ignore_count=True, display_names=False, worst=True, top_x=50)]
     names = [key_card_dict[str(card)] for card in cards]
+    worst_names = [key_card_dict[str(card)] for card in worst_cards]
 
 
-    def hinton(W, max_weight=None, names=names):
+    def hinton(W, max_weight=None, names=(names, worst_names)):
         """
         Draws a Hinton diagram for visualizing a weight matrix.
         Temporarily disables matplotlib interactive mode if it is on,
@@ -182,8 +185,8 @@ if __name__ == '__main__':
         cmap = plt.get_cmap('RdYlGn')
         for x in range(width):
             if names:
-                plt.text(-0.5, x, names[x], fontsize=12, ha='right', va='bottom')
-                plt.text(x, height+0.5, names[height-x-1], fontsize=12, va='bottom', rotation='vertical', ha='left')
+                plt.text(-0.5, x, names[0][x], fontsize=12, ha='right', va='bottom')
+                plt.text(x, height+0.5, names[1][height-x-1], fontsize=12, va='bottom', rotation='vertical', ha='left')
             for y in range(height):
                 _x = x+1
                 _y = y+1
@@ -197,6 +200,6 @@ if __name__ == '__main__':
         P.show()
     print(names)
     card_matrix = matrix(mtg_format=['standard'], ignore_count=True, proportion=True)
-    card_matrix = card_matrix[:, cards][cards]
+    card_matrix = card_matrix[:, worst_cards][cards]
     print(card_matrix)
     hinton(card_matrix)
