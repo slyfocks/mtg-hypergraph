@@ -6,6 +6,7 @@ import os
 import requests
 from requests.exceptions import Timeout, ConnectionError
 import math
+import numpy as np
 
 DATA_REPO = '/'.join(os.path.dirname(os.path.realpath(__file__)).split('/')[:-1]) + '/data/'
 URL = 'http://www.mtggoldfish.com/tournament/'
@@ -195,14 +196,49 @@ def scg_deck_data(path=DATA_REPO + 'scg_decks/', output=True, verbose=True):
         return decks
 
 
-def scg_card_data(deck_data=DATA_REPO + 'scg9272814.json', output=True):
-    card_data = defaultdict()
+def scg_card_data(deck_data=DATA_REPO + 'scg9272814.json', min_plays=20, card_combo=False, output=False):
+    card_data = defaultdict(list)
     with open(deck_data) as file:
         data = json.load(file)
+    for deck in data:
+        if card_combo:
+            for card in itertools.combinations(deck['card']['names'], r=card_combo):
+                #appends x instances of the rank of the deck, where x is the quantity of the card in question
+                card_data[card[0][0] + ', ' + card[1][0]] += (card[0][1] + card[1][1])*[int(deck['rank'])]
+        else:
+            for card in deck['card']['names']:
+                card_data[card[0]] += card[1]*[int(deck['rank'])]
+
+    for card in card_data:
+        card_data[card] = (np.mean(card_data[card]), np.std(card_data[card]), len(card_data[card]))
+
+    #only want cards that appear min_plays or more times
+    card_data = [item for item in card_data.items() if item[1][2] >= min_plays]
+
+    if output:
+        write_path = output
+        with open(write_path, 'w') as writefile:
+            json.dump(card_data, writefile, indent=4, separators=(',', ': '))
+    else:
+        return card_data
 
 
+#sort_key can be name, appearances, avg_rank, or std_dev_rank
+def scg_sorted(deck_data_path, sort_key='appearances', reverse=True):
+    with open(deck_data_path) as file:
+        data = json.load(file)
 
+    if sort_key == 'name':
+        return sorted(data, key=lambda x: x[0], reverse=reverse)
+    elif sort_key == 'avg_rank':
+        k = 0
+    elif sort_key == 'std_dev_rank':
+        k = 1
+    else:
+        k = 2
+    return sorted(data, key=lambda x: x[1][k], reverse=reverse)
 
 
 if __name__ == "__main__":
-    scg_deck_data()
+    #scg_card_data(card_combo=2, output=DATA_REPO + 'scg9272814data2combo.json')
+    print(scg_sorted(DATA_REPO + 'scg9272814data2combo.json', sort_key='avg_rank', reverse=False))
