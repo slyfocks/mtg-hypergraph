@@ -1,3 +1,4 @@
+from collections import defaultdict
 import itertools
 import json
 from lxml import html
@@ -9,6 +10,7 @@ import math
 DATA_REPO = '/'.join(os.path.dirname(os.path.realpath(__file__)).split('/')[:-1]) + '/data/'
 URL = 'http://www.mtggoldfish.com/tournament/'
 ML_URL = 'http://www.magic-league.com/'
+SCG_URL = 'http://sales.starcitygames.com/deckdatabase/deckshow.php?&t%5BC1%5D=1'
 
 
 def tournaments(output=DATA_REPO + 'tournaments.json', verbose=True):
@@ -48,7 +50,7 @@ def tournaments(output=DATA_REPO + 'tournaments.json', verbose=True):
         json.dump(tourney_list, writefile, indent=4, sort_keys=True, separators=(',', ': '))
 
 
-def ml_tournament_ids(mtg_format=['standard'], output=True, verbose=True):
+def ml_tournament_ids(mtg_format=['limited'], output=True, verbose=True):
     id_list = list()
     add_ids = id_list.extend
     if not os.path.isdir(DATA_REPO):
@@ -62,7 +64,7 @@ def ml_tournament_ids(mtg_format=['standard'], output=True, verbose=True):
             continue
         #only stores ids of tournaments that match the specified mtg_format(s)
         ids = [b.text for a in page.xpath('/html/body/table//tr[2]/td[2]/div[2]/table//tr')
-               for b in a.xpath('td/a[@href]') if a.xpath('td[3]')[0].text.lower() in mtg_format]
+               for b in a.xpath('td/a[@href]') if a.xpath('td[4]')[0].text.lower() in mtg_format]
         add_ids(ids)
         if verbose:
             print(ids)
@@ -91,7 +93,10 @@ def ml_tournament_player_data(tournament_id):
     #list of lists of each players decklist
     decks = [a.xpath('text()') for a in page.xpath('//td[@class="MD"]')]
     decks = [[card.strip('\n\t\t\t') for card in decks[i] + decks[i+1]] for i in range(0, len(decks), 2)]
-    players, records = zip(*players_records)
+    try:
+        players, records = zip(*players_records)
+    except ValueError:
+        return
     return players, records, decks
 
 
@@ -112,7 +117,7 @@ def ml_tournament_matchups(tournament_id, round_count):
     return matchups
 
 
-def ml_tournament(mtg_format=['standard'], output=True, verbose=True):
+def ml_tournament(mtg_format=['limited'], output=True, verbose=True):
     path = DATA_REPO + 'tournament_ids_' + '_'.join(mtg_format) + '.json'
     if not os.path.isfile(path):
         ml_tournament_ids(mtg_format=mtg_format)
@@ -127,7 +132,10 @@ def ml_tournament(mtg_format=['standard'], output=True, verbose=True):
         except (IOError, TypeError, Timeout):
             print('request error')
             continue
-        players, records, decks = ml_tournament_player_data(id)
+        try:
+            players, records, decks = ml_tournament_player_data(id)
+        except TypeError:
+            continue
         #make sure all the data is present
         if not any(players):
             continue
@@ -148,5 +156,53 @@ def ml_tournament(mtg_format=['standard'], output=True, verbose=True):
     else:
         return tournament_data
 
+
+def file_gen(path, *exts):
+    """
+    lists files with the given extensions
+    """
+    return (os.path.join(root, file) for root, dirs, files in os.walk(path)
+            for file in files if any(file.endswith(ext) for ext in exts))
+
+
+def scg_deck_data(path=DATA_REPO + 'scg_decks/', output=True, verbose=True):
+    deck_files = file_gen(path, 'Deck.html')
+    decks = list()
+    add_deck = decks.append
+    for deck_file in deck_files:
+        with open(deck_file) as file:
+            page = html.fromstring(file.read())
+        deck_name = page.xpath('//*[@id="article_content"]/div/div[1]/div[1]/header[1]/a')[0].text
+        if verbose:
+            print(deck_name)
+        player_name = page.xpath('//*[@id="article_content"]/div/div[1]/div[1]/header[2]/a')[0].text
+        #scg has weird formatting, hence the extended space in the split.
+        rank = page.xpath('//*[@id="article_content"]/div//div[1]/header[3]')[0].text.split('			')[1][:-2]
+        tournament = page.xpath('//*[@id="article_content"]/div//div[1]/header[3]/a')[0].text
+        date = page.xpath('//*[@id="article_content"]/div/div[1]/div[1]/header[3]/text()[2]')[0].split(' ')[-1]
+        deck_types = [(a.text.replace('(', '').replace(')', '').split(' ')[0],
+                      int(a.text.replace('(', '').replace(')', '').split(' ')[1]))
+                      for a in page.xpath('//*[@id="article_content"]/div/div[3]/div/h3')]
+        cards = [(a.xpath('a')[0].text, int(a.text)) for a in page.xpath('//ul[@rel]/li')]
+        deck_data = dict(name=deck_name, player=player_name, rank=rank, event=tournament, date=date,
+                         card=dict(types=deck_types, names=cards))
+        add_deck(deck_data)
+    if output:
+        write_path = DATA_REPO + 'scg9272814.json'
+        with open(write_path, 'w') as writefile:
+            json.dump(decks, writefile, indent=4, sort_keys=True, separators=(',', ': '))
+    else:
+        return decks
+
+
+def scg_card_data(deck_data=DATA_REPO + 'scg9272814.json', output=True):
+    card_data = defaultdict()
+    with open(deck_data) as file:
+        data = json.load(file)
+
+
+
+
+
 if __name__ == "__main__":
-    ml_tournament()
+    scg_deck_data()
