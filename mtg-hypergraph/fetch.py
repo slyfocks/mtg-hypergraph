@@ -51,12 +51,14 @@ def tournaments(output=DATA_REPO + 'tournaments.json', verbose=True):
         json.dump(tourney_list, writefile, indent=4, sort_keys=True, separators=(',', ': '))
 
 
-def ml_tournament_ids(mtg_format=['limited'], output=True, verbose=True):
+def ml_tournament_ids(mtg_format=['constructed', 'limited'],
+                      exclude=['modern', 'legacy', 'aq/aq/aq/aq/aq/aq sealed', '2e/2e/2e/2e/2e/2e sealed'],
+                      output=False, verbose=True):
     id_list = list()
     add_ids = id_list.extend
     if not os.path.isdir(DATA_REPO):
         os.makedirs(DATA_REPO)
-    for i in range(0, 5000, 50):
+    for i in range(0, 1):
         link = ML_URL + 'tourney_list.php?start=' + str(i)
         try:
             page = html.fromstring(requests.get(link, timeout=10).text)
@@ -65,7 +67,8 @@ def ml_tournament_ids(mtg_format=['limited'], output=True, verbose=True):
             continue
         #only stores ids of tournaments that match the specified mtg_format(s)
         ids = [b.text for a in page.xpath('/html/body/table//tr[2]/td[2]/div[2]/table//tr')
-               for b in a.xpath('td/a[@href]') if a.xpath('td[4]')[0].text.lower() in mtg_format]
+               for b in a.xpath('td/a[@href]') if a.xpath('td[4]')[0].text.lower() in mtg_format
+               and a.xpath('td[3]')[0].text.lower() not in exclude]
         add_ids(ids)
         if verbose:
             print(ids)
@@ -118,7 +121,7 @@ def ml_tournament_matchups(tournament_id, round_count):
     return matchups
 
 
-def ml_tournament(mtg_format=['limited'], output=True, verbose=True):
+def ml_tournament(mtg_format=['constructed', 'limited'], output=True, verbose=True):
     path = DATA_REPO + 'tournament_ids_' + '_'.join(mtg_format) + '.json'
     if not os.path.isfile(path):
         ml_tournament_ids(mtg_format=mtg_format)
@@ -202,9 +205,12 @@ def scg_card_data(deck_data=DATA_REPO + 'scg9272814.json', min_plays=20, card_co
         data = json.load(file)
     for deck in data:
         if card_combo:
-            for card in itertools.combinations(deck['card']['names'], r=card_combo):
+            for card_group in itertools.combinations(deck['card']['names'], r=card_combo):
+                #get card names and join them with semi-colon
+                card_name = '; '.join([card[0] for card in card_group])
+                card_count = sum([card[1] for card in card_group])
                 #appends x instances of the rank of the deck, where x is the quantity of the card in question
-                card_data[card[0][0] + ', ' + card[1][0]] += (card[0][1] + card[1][1])*[int(deck['rank'])]
+                card_data[card_name] += card_count*[int(deck['rank'])]
         else:
             for card in deck['card']['names']:
                 card_data[card[0]] += card[1]*[int(deck['rank'])]
@@ -224,7 +230,7 @@ def scg_card_data(deck_data=DATA_REPO + 'scg9272814.json', min_plays=20, card_co
 
 
 #sort_key can be name, appearances, avg_rank, or std_dev_rank
-def scg_sorted(deck_data_path, sort_key='appearances', reverse=True):
+def scg_sorted(deck_data_path, sort_key='appearances', reverse=True, output=True):
     with open(deck_data_path) as file:
         data = json.load(file)
 
@@ -236,9 +242,19 @@ def scg_sorted(deck_data_path, sort_key='appearances', reverse=True):
         k = 1
     else:
         k = 2
-    return sorted(data, key=lambda x: x[1][k], reverse=reverse)
+
+    sorted_data = sorted(data, key=lambda x: x[1][k], reverse=reverse)
+
+    if output:
+        write_path = deck_data_path.split('.')[0] + sort_key + '_sorted.json'
+        with open(write_path, 'w') as writefile:
+            json.dump(sorted_data, writefile, indent=4, separators=(',', ': '))
+    else:
+        return sorted_data
 
 
 if __name__ == "__main__":
-    #scg_card_data(card_combo=2, output=DATA_REPO + 'scg9272814data2combo.json')
-    print(scg_sorted(DATA_REPO + 'scg9272814data2combo.json', sort_key='avg_rank', reverse=False))
+    ml_tournament_ids(output=True)
+    ml_tournament()
+    #scg_card_data(card_combo=4, output=DATA_REPO + 'scg9272814data4combo.json')
+    #scg_sorted(DATA_REPO + 'scg9272814data4combo.json', sort_key='avg_rank', reverse=False)

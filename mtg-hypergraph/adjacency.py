@@ -12,7 +12,7 @@ from fetch import ml_tournament
 DATA_REPO = '/'.join(os.path.dirname(os.path.realpath(__file__)).split('/')[:-1]) + '/data/'
 
 
-def card_key(mtg_format=['standard'], output=False):
+def card_key(mtg_format=['constructed', 'limited'], output=False):
     data_path = DATA_REPO + 'tournament_data_' + '_'.join(mtg_format) + '.json'
     key_path = DATA_REPO + 'card_key_' + '_'.join(mtg_format) + '.json'
     if os.path.isfile(key_path) and not output:
@@ -25,7 +25,7 @@ def card_key(mtg_format=['standard'], output=False):
         data = json.load(file)
     card_set = set(' '.join(card.split(' ')[1:]) for tournament in data
                    for entry in tournament['entries'] for card in entry['deck'])
-    card_dict = {card: index for index,card in enumerate(card_set)}
+    card_dict = {card: index for index, card in enumerate(card_set)}
     if output:
         with open(key_path, 'w') as writefile:
             json.dump(card_dict, writefile, indent=4, sort_keys=True, separators=(',', ': '))
@@ -33,12 +33,13 @@ def card_key(mtg_format=['standard'], output=False):
         return card_dict
 
 
-def key_card(mtg_format=['standard']):
+def key_card(mtg_format=['constructed', 'limited']):
     return {str(index): card for card, index in card_key(mtg_format=mtg_format).items()}
 
 
 #a higher (lower) norm makes the ranking more (less) favorable to popular cards
-def matrix(mtg_format=['standard'], ignore_count=False, output=False, proportion=False, norm=0.1, data_fmt='%u'):
+def matrix(mtg_format=['constructed', 'limited'], ignore_count=False,
+           output=False, proportion=False, norm=0.1, data_fmt='%u'):
     tournament_path = DATA_REPO + 'tournament_data_' + '_'.join(mtg_format) + '.json'
     matrix_path = DATA_REPO + 'adjacency' + '_'.join([ignore_count*'ignore_count',
                                                       proportion*'proportion'] + mtg_format) + '.txt'
@@ -95,7 +96,7 @@ def mean_confidence_interval(data, confidence=0.95):
     return m, m-h, m+h
 
 
-def best_cards(mtg_format=['standard'], ignore_count=False, display_names=True,
+def best_cards(mtg_format=['constructed', 'limited'], ignore_count=False, display_names=True,
                proportion=True, verbose=True, worst=False, top_x=20):
     key_card_dict = key_card(mtg_format=mtg_format)
     card_matrix = matrix(mtg_format=mtg_format, ignore_count=ignore_count, proportion=proportion)
@@ -112,10 +113,10 @@ def best_cards(mtg_format=['standard'], ignore_count=False, display_names=True,
     return sorted_conf_ints
 
 
-def best_cards_against(card_name, mtg_format=['standard'], top_x=30):
+def best_cards_against(card_name, mtg_format=['constructed', 'limited'], top_x=30):
     card_to_key = card_key(mtg_format=mtg_format)
     key_to_card = key_card(mtg_format=mtg_format)
-    card_matrix = matrix(mtg_format=['standard'], ignore_count=True)
+    card_matrix = matrix(mtg_format=mtg_format, ignore_count=True)
     card_id = card_to_key[card_name]
     success_loss_array = [(index, [1]*card_matrix[index, card_id] + [0]*card_matrix[card_id, index])
                           for index in range(len(card_matrix[card_id]))
@@ -127,8 +128,8 @@ def best_cards_against(card_name, mtg_format=['standard'], top_x=30):
     print(sorted_conf_ints)
 
 
-def digraph_best_cards(mtg_format=['standard'], top_x=2):
-    card_matrix = matrix(mtg_format=mtg_format, ignore_count=True)
+def digraph_best_cards(mtg_format=['constructed', 'limited'], top_x=2):
+    card_matrix = matrix(mtg_format=mtg_format, ignore_count=False)
     success_loss_array = [[(i, j, [1]*card_matrix[i, j] + [0]*card_matrix[j, i]) for j in range(len(card_matrix))]
                           for i in range(len(card_matrix))]
     conf_ints = [sorted([(matchup[0], matchup[1], mean_confidence_interval(matchup[2])[1]) for matchup in row
@@ -146,6 +147,7 @@ def digraph_best_cards(mtg_format=['standard'], top_x=2):
 #for more data
 
 if __name__ == '__main__':
+    card_key(output=True)
     import pylab as P
     import matplotlib.cm as cm
 
@@ -158,9 +160,12 @@ if __name__ == '__main__':
         xcorners = np.array([x - hs, x + hs, x + hs, x - hs])
         ycorners = np.array([y - hs, y - hs, y + hs, y + hs])
         P.fill(xcorners, ycorners, color=color)
-    key_card_dict = key_card(mtg_format=['standard'])
-    cards = [entry[0] for entry in best_cards(ignore_count=True, display_names=False, top_x=50)]
-    worst_cards = [entry[0] for entry in best_cards(ignore_count=True, display_names=False, worst=True, top_x=50)]
+    key_card_dict = key_card(mtg_format=['constructed', 'limited'])
+    cards = [entry[0] for entry in
+             best_cards(mtg_format=['constructed', 'limited'], ignore_count=True, display_names=False, top_x=50)]
+    worst_cards = [entry[0] for entry in
+                   best_cards(mtg_format=['constructed', 'limited'], ignore_count=True,
+                              display_names=False, worst=False, top_x=50)]
     names = [key_card_dict[str(card)] for card in cards]
     worst_names = [key_card_dict[str(card)] for card in worst_cards]
 
@@ -199,7 +204,7 @@ if __name__ == '__main__':
             P.ion()
         P.show()
     print(names)
-    card_matrix = matrix(mtg_format=['standard'], ignore_count=True, proportion=True)
+    card_matrix = matrix(mtg_format=['constructed', 'limited'], ignore_count=True, proportion=True)
     card_matrix = card_matrix[:, worst_cards][cards]
     print(card_matrix)
     hinton(card_matrix)
