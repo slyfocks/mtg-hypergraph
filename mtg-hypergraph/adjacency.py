@@ -149,7 +149,6 @@ def digraph_best_cards(mtg_format=['constructed', 'limited'], top_x=2):
 if __name__ == '__main__':
     card_key(output=True)
     import pylab as P
-    import matplotlib.cm as cm
 
     def _blob(x, y, area, color):
         """
@@ -162,10 +161,10 @@ if __name__ == '__main__':
         P.fill(xcorners, ycorners, color=color)
     key_card_dict = key_card(mtg_format=['constructed', 'limited'])
     cards = [entry[0] for entry in
-             best_cards(mtg_format=['constructed', 'limited'], ignore_count=True, display_names=False, top_x=50)]
+             best_cards(mtg_format=['constructed', 'limited'], ignore_count=False, display_names=False, top_x=150)]
     worst_cards = [entry[0] for entry in
-                   best_cards(mtg_format=['constructed', 'limited'], ignore_count=True,
-                              display_names=False, worst=False, top_x=50)]
+                   best_cards(mtg_format=['constructed', 'limited'], ignore_count=False,
+                              display_names=False, worst=True, top_x=150)]
     names = [key_card_dict[str(card)] for card in cards]
     worst_names = [key_card_dict[str(card)] for card in worst_cards]
 
@@ -190,8 +189,8 @@ if __name__ == '__main__':
         cmap = plt.get_cmap('RdYlGn')
         for x in range(width):
             if names:
-                plt.text(-0.5, x, names[0][x], fontsize=12, ha='right', va='bottom')
-                plt.text(x, height+0.5, names[1][height-x-1], fontsize=12, va='bottom', rotation='vertical', ha='left')
+                plt.text(-0.5, x, names[0][x], fontsize=7, ha='right', va='bottom')
+                plt.text(x, height+0.5, names[1][height-x-1], fontsize=7, va='bottom', rotation='vertical', ha='left')
             for y in range(height):
                 _x = x+1
                 _y = y+1
@@ -204,7 +203,7 @@ if __name__ == '__main__':
             P.ion()
         P.show()
     print(names)
-    card_matrix = matrix(mtg_format=['constructed', 'limited'], ignore_count=True, proportion=True)
+    card_matrix = matrix(mtg_format=['constructed', 'limited'], ignore_count=False, proportion=True)
     card_matrix = card_matrix[:, worst_cards][cards]
     print(card_matrix)
     hinton(card_matrix)
