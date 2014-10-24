@@ -52,13 +52,18 @@ def tournaments(output=DATA_REPO + 'tournaments.json', verbose=True):
 
 
 def ml_tournament_ids(mtg_format=['constructed', 'limited'],
-                      exclude=['modern', 'legacy', 'aq/aq/aq/aq/aq/aq sealed', '2e/2e/2e/2e/2e/2e sealed'],
+                      exclude=['modern', 'legacy', 'aq/aq/aq/aq/aq/aq sealed', '2e/2e/2e/2e/2e/2e sealed',
+                               'lg/lg/lg/lg/lg/lg sealed', 'cub/cub/cub/cub/cub/cub sealed',
+                               'an/an/an/an/an/an sealed', '5e/5e/5e/5e/5e/5e sealed',
+                               'po1/po1/po2/po2/p3k/p3k sealed', '4e/4e/4e/4e/4e/4e sealed',
+                               'hl/hl/hl/hl/hl/hl sealed', 'ia/ia/al/al/csp/csp sealed', 'mi/mi/vi/vi/wl/wl sealed',
+                               'random format tournament (rft)', 'bring your own t2', 'dk/dk/dk/dk/dk/dk sealed'],
                       output=False, verbose=True):
     id_list = list()
     add_ids = id_list.extend
     if not os.path.isdir(DATA_REPO):
         os.makedirs(DATA_REPO)
-    for i in range(0, 1):
+    for i in range(0, 3):
         link = ML_URL + 'tourney_list.php?start=' + str(i)
         try:
             page = html.fromstring(requests.get(link, timeout=10).text)
